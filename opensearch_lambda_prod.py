@@ -31,10 +31,8 @@ def lambda_handler(event, context):
         params = {'Bucket': bucket, 'Key': key}
         response = s3.get_object(**params)
         log_data = response['Body'].read().decode('utf-8')
-        print("Log Data are: ", log_data)
 
         elasticsearch_bulk_data = transform(log_data, bucket, key)
-        print("Elasticsearch Bulk Data are: ", elasticsearch_bulk_data)
 
         if not elasticsearch_bulk_data:
             logger.info("Control message detected. No data to process.")
