@@ -72,7 +72,7 @@ def transform(payload, bucket, key):
 
             index_name = ''
             namespace = parsed_data.get('kubernetes', {}).get('namespace_name', '')
-            if 'dte-' in namespace:
+            if 'dte-' in namespace or 'hp-' in namespace:
                 date = parsed_data.get('date', '').split('T')[0]
                 index_name = f"{index_key}{namespace}_{date}"
                 log_line = parsed_data.get('log', '')
