@@ -1,8 +1,8 @@
-var aws = require('aws-sdk');
+const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
 var zlib = require('zlib');
 var https = require('https');
 var crypto = require('crypto');
-var s3 = new aws.S3({ apiVersion: '2006-03-01', region: 'ap-southeast-1' });
+const s3 = new S3Client({ region: 'ap-southeast-1' });
 
 var endpoint = process.env.ELASTICSEARCH_DOMAIN;
 var indexName = process.env.INDEX_KEY;
@@ -34,18 +34,18 @@ exports.handler = function(event, context, exit){
        Key: key,
     };
 
-    s3.getObject(params, function(err, data){
-        if (err) {
-          console.log('ERROR ' + err);
-          exit(err);
-        } else {
-            zlib.gunzip(data.Body, function(error, buffer){
+    s3.send(new GetObjectCommand(params)).then(data => {
+        const chunks = [];
+        data.Body.on('data', chunk => chunks.push(chunk));
+        data.Body.on('end', () => {
+            const buffer = Buffer.concat(chunks);
+            zlib.gunzip(buffer, function(error, unzippedBuffer){
                 if (error) {
                     console.log('Error uncompressing data', error);
                     return;
                 }
 
-                var logData = buffer.toString('ascii');
+                var logData = unzippedBuffer.toString('ascii');
                 var array = logData.toString().split("\n");
                 var bulkRequestBody = '';
 
@@ -64,21 +64,21 @@ exports.handler = function(event, context, exit){
 
                 // post documents to the Amazon Elasticsearch Service
                 post(bulkRequestBody, function(error, success, statusCode, failedItems) {
-                    console.log('Response: ' + JSON.stringify({
-                        "statusCode": statusCode
-                }));
-
-                if (error) {
-                    logFailure(error, failedItems);
-                    context.fail(JSON.stringify(error));
-                } else {
-                    console.log('Success: ' + JSON.stringify(success));
-                    context.succeed('Success');
-                }
+                    if (error) {
+                        logFailure(error, failedItems);
+                        context.fail(JSON.stringify(error));
+                    } else {
+                        // Unnecessary success logging removed for CloudWatch efficiency
+                        context.succeed('Success');
+                    }
                 });
             });
-        }
-    });       
+        });
+        data.Body.on('error', err => exit(err));
+    }).catch(err => {
+        console.log('ERROR ' + err);
+        exit(err);
+    });
 };
 
 function transform(array, key, formattedDate) {
